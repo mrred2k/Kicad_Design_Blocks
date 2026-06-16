@@ -1,0 +1,10 @@
+# KiCad backup files
+*.bak
+*.kicad_sch-bak
+*.kicad_pcb-bak
+*-backups/
+
+# OS
+.DS_Store
+Thumbs.db
+Kicad_Design_Blocks.code-workspace
