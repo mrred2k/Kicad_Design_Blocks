@@ -1,0 +1,11 @@
+{
+"description": "Buck (step-down) DC/DC converter, Vin max 32V, Vout fixed 5V",
+"keywords": "buck step-down dcdc converter 5V power",
+"fields": {
+"maturity": "layout",
+"lcsc_parts": "yes",
+"lcsc_basic_optimized": "yes",
+"has_3d": "yes",
+"reviewed": "no"
+}
+}

@@ -1,0 +1,11 @@
+{
+"description": "USB 2.0 Type-C receptacle, low-speed HID device, CC resistors for 5V power negotiation, ESD protection on D+/D-",
+"keywords": "usb usb-c connector hid tinyusb",
+"fields": {
+  "maturity": "layout",
+  "lcsc_parts": "yes",
+  "lcsc_basic_optimized": "yes",
+  "has_3d": "yes",
+  "reviewed": "no"
+}
+}

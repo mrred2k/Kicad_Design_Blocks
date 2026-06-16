@@ -1,0 +1,11 @@
+{
+"description": "Low-side switch for 24V loads, BJT-driven N-ch MOSFET (AO3400A), active high, MCU-compatible input, status LED included",
+"keywords": "mosfet mcu low-side switching",
+"fields": {
+  "maturity": "layout",
+  "lcsc_parts": "yes",
+  "lcsc_basic_optimized": "yes",
+  "has_3d": "yes",
+  "reviewed": "no"
+}
+}

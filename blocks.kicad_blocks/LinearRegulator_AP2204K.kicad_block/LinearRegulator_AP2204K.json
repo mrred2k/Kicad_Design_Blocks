@@ -1,0 +1,11 @@
+{
+"description": "LDO linear regulator with enable pin, Vin 5V, Vout 3.3V fixed, 150mA max, AP2204K (SOT-23-5)",
+"keywords": "ldo linear regulator 3V3 AP2204K",
+"fields": {
+  "maturity": "schematic",
+  "lcsc_parts": "yes",
+  "lcsc_basic_optimized": "yes",
+  "has_3d": "no",
+  "reviewed": "no"
+}
+}

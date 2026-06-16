@@ -1,0 +1,11 @@
+{
+"description": "LDO linear regulator, Vin 5V, Vout 3.3V fixed, 1A max, AMS1117-3.3 (SOT-223)",
+"keywords": "ldo linear regulator 3V3 AMS1117",
+"fields": {
+  "maturity": "schematic",
+  "lcsc_parts": "yes",
+  "lcsc_basic_optimized": "yes",
+  "has_3d": "no",
+  "reviewed": "no"
+}
+}

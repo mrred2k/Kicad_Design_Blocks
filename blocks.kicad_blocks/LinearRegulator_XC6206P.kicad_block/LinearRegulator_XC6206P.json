@@ -1,0 +1,11 @@
+{
+"description": "LDO linear regulator, Vin 5V, Vout 3.3V fixed, 250mA max, XC6206P (SOT-23-3)",
+"keywords": "ldo linear regulator 3V3 XC6206",
+"fields": {
+  "maturity": "layout",
+  "lcsc_parts": "yes",
+  "lcsc_basic_optimized": "yes",
+  "has_3d": "yes",
+  "reviewed": "no"
+}
+}
