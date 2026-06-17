@@ -2,7 +2,7 @@
 
 # LinearRegulator_AP2204K
 
-[![Schematic](https://img.shields.io/badge/Quality-Schematic-9E9E9E?style=flat-square)](../../CONTRIBUTING.md#quality-scale) ![auto-generated](https://img.shields.io/badge/auto--generated-CI-lightgrey?style=flat-square)
+[![Wood](https://img.shields.io/badge/Quality-Wood-8B5E3C?style=flat-square)](../../CONTRIBUTING.md#quality-scale) ![auto-generated](https://img.shields.io/badge/auto--generated-CI-lightgrey?style=flat-square)
 
 LDO linear regulator with enable pin, Vin 5V, Vout 3.3V fixed, 150mA max, AP2204K (SOT-23-5)
 
