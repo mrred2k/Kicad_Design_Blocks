@@ -194,9 +194,43 @@ jobs:
 
           # README generator: reads the block JSON + schematic, writes README.md.
           cat > /tmp/gen_readme.py << 'PYEOF'
-          import sys, json, os, re
+          import sys, json as _json, os, re, urllib.request, time
           from collections import defaultdict
           from pathlib import Path
+
+          _lcsc_cache = {}
+
+          def fetch_lcsc(lcsc_id):
+              if not lcsc_id or lcsc_id in _lcsc_cache:
+                  return _lcsc_cache.get(lcsc_id, {})
+              try:
+                  url = f'https://easyeda.com/api/products/{lcsc_id}/components'
+                  req = urllib.request.Request(url, headers={
+                      'Accept': 'application/json',
+                      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0.0.0',
+                      'Referer': 'https://easyeda.com/',
+                  })
+                  with urllib.request.urlopen(req, timeout=8) as r:
+                      data = _json.loads(r.read())
+                  if not data.get('success'):
+                      _lcsc_cache[lcsc_id] = {}; return {}
+                  dataStr = data['result']['dataStr']
+                  if isinstance(dataStr, str): dataStr = _json.loads(dataStr)
+                  c = dataStr['head']['c_para']
+                  tags = data['result'].get('tags', [])
+                  mfr = re.sub(r'\s*\([^)]*[一-鿿][^)]*\)', '', c.get('Manufacturer', '')).strip()
+                  info = {
+                      'mfr': mfr,
+                      'mpn': c.get('Manufacturer Part', '') or c.get('MPN', ''),
+                      'cat': tags[0] if tags else '',
+                      'jlc': c.get('JLCPCB Part Class', '').replace(' Part', ''),
+                  }
+                  _lcsc_cache[lcsc_id] = info
+                  time.sleep(0.3)
+                  return info
+              except Exception as e:
+                  print(f'  LCSC fetch {lcsc_id}: {e}', file=sys.stderr)
+                  _lcsc_cache[lcsc_id] = {}; return {}
 
           def parse_bom(sch_file):
               with open(sch_file, encoding='utf-8') as f: txt = f.read()
@@ -241,34 +275,46 @@ jobs:
                   m = re.match(r'([A-Za-z_]+)(\d+)', r)
                   return (m.group(1), int(m.group(2))) if m else (r, 0)
               for k in groups: groups[k].sort(key=sref)
-              rows = [('Refs','Value','Footprint','LCSC'), ('---','---','---','---')]
+              unique_lcsc = {lcsc for (_,_,lcsc,_) in groups if lcsc}
+              lcsc_info = {n: fetch_lcsc(n) for n in unique_lcsc}
+              rows = [('Refs','Value','Footprint','LCSC','JLCPCB','Manufacturer','MPN','Category'),
+                      ('---', '---',  '---',      '---', '---',   '---',         '---','---')]
               for (val,fp,lcsc,dnp),refs in sorted(groups.items(), key=lambda x: sref(x[1][0])):
-                  r = ', '.join(refs)+(' *(DNP)*' if dnp else '')
-                  rows.append((r, val or '—', fp or '—', lcsc or '—'))
-              return '\n'.join('| '+' | '.join(r)+' |' for r in rows)
+                  r   = ', '.join(refs)+(' *(DNP)*' if dnp else '')
+                  inf = lcsc_info.get(lcsc, {})
+                  rows.append((r, val or '—', fp or '—', lcsc or '—',
+                               inf.get('jlc','') or '—', inf.get('mfr','') or '—',
+                               inf.get('mpn','') or '—', inf.get('cat','') or '—'))
+              table = '\n'.join('| '+' | '.join(r)+' |' for r in rows)
+              return '*Manufacturer and MPN fetched automatically from [LCSC](https://lcsc.com).*\n\n' + table
 
           block_dir  = sys.argv[1]
           block_name = Path(block_dir).name.removesuffix('.kicad_block')
 
           json_path = os.path.join(block_dir, f'{block_name}.json')
-          meta = json.load(open(json_path)) if os.path.exists(json_path) else {}
+          meta = _json.load(open(json_path)) if os.path.exists(json_path) else {}
           fields = meta.get('fields', {})
 
           sch_path = os.path.join(block_dir, f'{block_name}.kicad_sch')
           bom = parse_bom(sch_path) if os.path.exists(sch_path) else ''
 
-          lines = [f'# {block_name}', '']
+          autogen = '<!-- AUTO-GENERATED — do not edit, this file is overwritten on every push to main -->'
+          lines = [autogen, '', f'# {block_name}', '']
           if meta.get('description'): lines += [meta['description'], '']
           lines += [f'![preview]({block_name}_preview.svg)', '']
           if bom: lines += ['## Bill of Materials', '', bom, '']
 
-          field_labels = [('maturity','Maturity'), ('lcsc_parts','LCSC parts'),
-                          ('jlcpcb_basic','JLCPCB Basic'), ('has_3d','3D models'), ('reviewed','Reviewed')]
-          parts = []
-          if meta.get('keywords'): parts.append(f'**Keywords:** {meta["keywords"]}')
-          for key, label in field_labels:
-              if fields.get(key): parts.append(f'**{label}:** {fields[key]}')
-          if parts: lines += ['---', ' · '.join(parts), '']
+          field_labels = [('maturity','Maturity'), ('lcsc_parts','LCSC Parts'),
+                          ('jlcpcb_basic','JLCPCB Basic'), ('has_3d','3D Models'), ('reviewed','Reviewed')]
+          present = [(label, fields[key]) for key, label in field_labels if fields.get(key)]
+          if present or meta.get('keywords'):
+              lines.append('---')
+              if meta.get('keywords'): lines += [f'*Keywords: {meta["keywords"]}*', '']
+              if present:
+                  lines += ['| | |', '|---|---|']
+                  for lbl, val in present:
+                      lines.append(f'| {lbl} | {val.capitalize()} |')
+                  lines.append('')
 
           open(os.path.join(block_dir, 'README.md'), 'w').write('\n'.join(lines))
           print(f'README: {block_dir}/README.md')
