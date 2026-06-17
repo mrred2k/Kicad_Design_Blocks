@@ -299,8 +299,7 @@ jobs:
           preview_branch="previews/pr-${{ github.event.number }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin ${{ github.base_ref }}
-          find blocks.kicad_blocks -name "*_preview.svg" | xargs git add --
+          find blocks.kicad_blocks -name "*_preview.svg" | xargs git add --force --
           if git diff --staged --quiet; then
             echo "no_changes=true" >> $GITHUB_OUTPUT
           else
