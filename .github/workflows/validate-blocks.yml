@@ -13,11 +13,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Validate block metadata
         run: |
           python3 << 'EOF'
-          import json, os, sys
+          import json, os, sys, subprocess
+
+          # Only flag files that are new in this PR, not ones already on main
+          base = os.environ.get("GITHUB_BASE_REF", "main")
+          try:
+              changed = set(subprocess.check_output(
+                  ["git", "diff", "--name-only", f"origin/{base}...HEAD"],
+                  stderr=subprocess.DEVNULL
+              ).decode().split())
+          except subprocess.CalledProcessError:
+              changed = set()
 
           REQUIRED_FIELDS = {
               "maturity": ["schematic", "layout", "produced"],
@@ -36,8 +48,8 @@ jobs:
               block_name = entry.name.removesuffix(".kicad_block")
               block_path = entry.path
 
-              readme_path = os.path.join(block_path, "README.md")
-              if os.path.exists(readme_path):
+              readme_rel = f"blocks.kicad_blocks/{entry.name}/README.md"
+              if readme_rel in changed:
                   errors.append(
                       f"{block_name}: README.md found — READMEs are auto-generated on merge, "
                       f"please remove it. Put any extra info in the 'description' field of {block_name}.json instead."
