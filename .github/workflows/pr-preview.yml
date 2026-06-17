@@ -262,6 +262,7 @@ jobs:
           git fetch origin ${{ github.base_ref }}
           changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
             | grep '^blocks\.kicad_blocks/' | cut -d'/' -f1-2 | sort -u)
+          echo "$changed" > /tmp/changed_blocks.txt
 
           for block_dir in $changed; do
             [ -d "$block_dir" ] || continue
@@ -299,7 +300,12 @@ jobs:
           preview_branch="previews/pr-${{ github.event.number }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          find blocks.kicad_blocks -name "*_preview.svg" | xargs git add --force --
+          while IFS= read -r block_dir; do
+            [ -d "$block_dir" ] || continue
+            block_name=$(basename "$block_dir" .kicad_block)
+            preview="$block_dir/${block_name}_preview.svg"
+            [ -f "$preview" ] && git add --force -- "$preview"
+          done < /tmp/changed_blocks.txt
           if git diff --staged --quiet; then
             echo "no_changes=true" >> $GITHUB_OUTPUT
           else
@@ -321,14 +327,15 @@ jobs:
             const repo = context.repo;
             const base = `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${branch}`;
 
-            const svgs = execSync('find blocks.kicad_blocks -name "*_preview.svg" 2>/dev/null || true')
-              .toString().trim().split('\n').filter(Boolean);
+            const changedBlocks = fs.readFileSync('/tmp/changed_blocks.txt', 'utf8')
+              .trim().split('\n').filter(Boolean);
 
             const blocks = {};
-            for (const svg of svgs) {
-              const m = svg.match(/blocks\.kicad_blocks\/(.+)\.kicad_block\/.+_preview\.svg/);
+            for (const blockDir of changedBlocks) {
+              const m = blockDir.match(/blocks\.kicad_blocks\/(.+)\.kicad_block/);
               if (!m) continue;
-              blocks[m[1]] = { url: `${base}/${svg}`, bom: '' };
+              const name = m[1];
+              blocks[name] = { url: `${base}/${blockDir}/${name}_preview.svg`, bom: '' };
             }
 
             // Read BOM markdown files generated in the previous step
