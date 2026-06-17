@@ -1,0 +1,82 @@
+# Runs on every PR that touches blocks.kicad_blocks/.
+# Checks that each block has a .kicad_sch, a .json, non-empty description/keywords,
+# and all required metadata fields with valid values. Fails hard so broken blocks can't be merged.
+name: Validate design blocks
+
+on:
+  pull_request:
+    paths:
+      - 'blocks.kicad_blocks/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate block metadata
+        run: |
+          python3 << 'EOF'
+          import json, os, sys
+
+          REQUIRED_FIELDS = {
+              "maturity": ["schematic", "layout", "produced"],
+              "lcsc_parts": ["yes", "no"],
+              "jlcpcb_basic": ["yes", "no"],
+              "has_3d": ["yes", "partial", "no"],
+              "reviewed": ["yes", "no"],
+          }
+
+          errors = []
+          blocks_dir = "blocks.kicad_blocks"
+
+          for entry in sorted(os.scandir(blocks_dir), key=lambda e: e.name):
+              if not entry.is_dir() or not entry.name.endswith(".kicad_block"):
+                  continue
+              block_name = entry.name.removesuffix(".kicad_block")
+              block_path = entry.path
+
+              readme_path = os.path.join(block_path, "README.md")
+              if os.path.exists(readme_path):
+                  errors.append(
+                      f"{block_name}: README.md found — READMEs are auto-generated on merge, "
+                      f"please remove it. Put any extra info in the 'description' field of {block_name}.json instead."
+                  )
+
+              sch_path = os.path.join(block_path, f"{block_name}.kicad_sch")
+              if not os.path.exists(sch_path):
+                  errors.append(f"{block_name}: missing {block_name}.kicad_sch")
+
+              json_path = os.path.join(block_path, f"{block_name}.json")
+              if not os.path.exists(json_path):
+                  errors.append(f"{block_name}: missing {block_name}.json")
+                  continue
+
+              try:
+                  with open(json_path) as f:
+                      data = json.load(f)
+              except json.JSONDecodeError as e:
+                  errors.append(f"{block_name}: invalid JSON — {e}")
+                  continue
+
+              if not data.get("description", "").strip():
+                  errors.append(f"{block_name}: description is empty")
+              if not data.get("keywords", "").strip():
+                  errors.append(f"{block_name}: keywords is empty")
+
+              fields = data.get("fields", {})
+              for field, valid_values in REQUIRED_FIELDS.items():
+                  value = fields.get(field)
+                  if value is None:
+                      errors.append(f"{block_name}: missing field '{field}'")
+                  elif value not in valid_values:
+                      errors.append(f"{block_name}: field '{field}' = '{value}' (allowed: {', '.join(valid_values)})")
+
+          if errors:
+              print("❌ Block validation failed:\n")
+              for e in errors:
+                  print(f"  • {e}")
+              sys.exit(1)
+          else:
+              print("✅ All blocks valid.")
+          EOF

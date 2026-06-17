@@ -1,0 +1,372 @@
+# Runs on every PR that touches blocks.kicad_blocks/ (including forks via pull_request_target).
+# Uses the official kicad/kicad:10.0 Docker image — no installation step needed.
+# Exports schematic and PCB SVGs, combines them into a side-by-side preview,
+# pushes to a temporary branch (previews/pr-NNN), and posts a PR comment.
+# Branch is deleted when the PR is closed or merged.
+name: PR block preview
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      - 'blocks.kicad_blocks/**'
+
+jobs:
+  preview:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    container:
+      image: kicad/kicad:10.0
+      options: --user root
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout PR files
+        uses: actions/checkout@v5
+        with:
+          ref: refs/pull/${{ github.event.number }}/merge
+          fetch-depth: 0
+
+      - name: Generate previews for changed blocks
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          cat > /tmp/combine_svg.py << 'PYEOF'
+          import xml.etree.ElementTree as ET, re, sys, os
+
+          def nums(s):
+              return [float(x) for x in re.findall(r'[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?', s or '')]
+
+          def pf(s, d=0.0):
+              n = nums(s); return n[0] if n else d
+
+          def path_coords(d):
+              tks = re.findall(r'[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?', d)
+              xs, ys, cx, cy, i = [], [], 0.0, 0.0, 0
+              def g(n):
+                  nonlocal i
+                  v = [float(tks[i+j]) for j in range(n)]; i += n; return v
+              while i < len(tks):
+                  c = tks[i]; i += 1
+                  if not c.isalpha(): continue
+                  rel = c.islower()
+                  try:
+                      while i < len(tks) and not tks[i].isalpha():
+                          if c in 'Mm':
+                              x,y = g(2)
+                              if rel: x,y = cx+x,cy+y
+                              xs.append(x); ys.append(y); cx,cy = x,y; c = 'l' if c=='m' else 'L'
+                          elif c in 'Ll':
+                              x,y = g(2)
+                              if rel: x,y = cx+x,cy+y
+                              xs.append(x); ys.append(y); cx,cy = x,y
+                          elif c in 'Hh':
+                              x = g(1)[0]
+                              if rel: x = cx+x
+                              xs.append(x); cx = x
+                          elif c in 'Vv':
+                              y = g(1)[0]
+                              if rel: y = cy+y
+                              ys.append(y); cy = y
+                          elif c in 'CcSs':
+                              v = g(6 if c in 'Cc' else 4); x,y = v[-2],v[-1]
+                              if rel: x,y = cx+x,cy+y
+                              xs.append(x); ys.append(y); cx,cy = x,y
+                          elif c in 'QqTt':
+                              v = g(4 if c in 'Qq' else 2); x,y = v[-2],v[-1]
+                              if rel: x,y = cx+x,cy+y
+                              xs.append(x); ys.append(y); cx,cy = x,y
+                          elif c in 'Aa':
+                              v = g(7); x,y = v[5],v[6]
+                              if rel: x,y = cx+x,cy+y
+                              xs.append(x); ys.append(y); cx,cy = x,y
+                          elif c in 'Zz': break
+                  except (IndexError, ValueError): pass
+              return xs, ys
+
+          def get_bbox(content):
+              try:
+                  tree = ET.fromstring(content)
+              except ET.ParseError:
+                  return None
+              skip = set()
+              for el in tree.iter():
+                  if (el.tag.split('}')[-1] if '}' in el.tag else el.tag) == 'defs':
+                      skip.add(id(el))
+                      for child in el.iter(): skip.add(id(child))
+              vb_m = re.search(r'viewBox="([^"]+)"', content)
+              page_w = page_h = 1e6
+              if vb_m:
+                  vb = [float(x) for x in vb_m.group(1).split()]
+                  if len(vb) >= 4: page_w, page_h = vb[2], vb[3]
+              all_x, all_y = [], []
+              for elem in tree.iter():
+                  if id(elem) in skip: continue
+                  tag = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+                  if tag == 'rect':
+                      x,y,w,h = pf(elem.get('x')),pf(elem.get('y')),pf(elem.get('width')),pf(elem.get('height'))
+                      if 0 < w < page_w * 0.9 and 0 < h < page_h * 0.9:
+                          all_x+=[x,x+w]; all_y+=[y,y+h]
+                  elif tag == 'line':
+                      all_x+=[pf(elem.get('x1')),pf(elem.get('x2'))]; all_y+=[pf(elem.get('y1')),pf(elem.get('y2'))]
+                  elif tag == 'circle':
+                      cx,cy,r=pf(elem.get('cx')),pf(elem.get('cy')),pf(elem.get('r'))
+                      all_x+=[cx-r,cx+r]; all_y+=[cy-r,cy+r]
+                  elif tag in ('polyline','polygon'):
+                      ns=nums(elem.get('points','')); all_x+=ns[0::2]; all_y+=ns[1::2]
+                  elif tag == 'path':
+                      px,py = path_coords(elem.get('d','')); all_x+=px; all_y+=py
+                  tx,ty=elem.get('x'),elem.get('y')
+                  if tx and ty:
+                      txf,tyf=pf(tx),pf(ty)
+                      if abs(txf)<1e5 and abs(tyf)<1e5: all_x.append(txf); all_y.append(tyf)
+              if not all_x or not all_y: return None
+              span = max(max(all_x)-min(all_x), max(all_y)-min(all_y))
+              pad = max(span * 0.03, 1.0)
+              x0,y0 = min(all_x)-pad, min(all_y)-pad
+              w,h   = max(all_x)-min(all_x)+2*pad, max(all_y)-min(all_y)+2*pad
+              return (x0, y0, w, h)
+
+          def inner_svg(content, prefix):
+              content = re.sub(r'\bid="', f'id="{prefix}_', content)
+              content = re.sub(r'url\(#', f'url(#{prefix}_', content)
+              content = re.sub(r'href="#', f'href="#{prefix}_', content)
+              start = re.search(r'<svg\b[^>]*>', content, re.DOTALL)
+              if not start: return ''
+              last = content.rfind('</svg>')
+              return content[start.end():last] if last > start.end() else ''
+
+          sch_file = sys.argv[1] if len(sys.argv) > 1 else ''
+          pcb_file = sys.argv[2] if len(sys.argv) > 2 else ''
+          out_file = sys.argv[3] if len(sys.argv) > 3 else 'preview.svg'
+
+          PX_H = 500
+          GAP  = 8
+
+          panels = []
+          for fname, bg, prefix in [(sch_file, '#ffffff', 'sch'), (pcb_file, '#1a1a1a', 'pcb')]:
+              if not fname or not os.path.exists(fname): continue
+              with open(fname) as f: content = f.read()
+              bbox = get_bbox(content)
+              if not bbox: continue
+              x0,y0,w,h = bbox
+              px_w = max(1, int(PX_H * w / h)) if h > 0 else PX_H
+              panels.append({'content': content, 'bbox': bbox, 'bg': bg, 'prefix': prefix, 'px_w': px_w})
+
+          if not panels:
+              print(f"No content for {out_file}"); sys.exit(0)
+
+          total_w = sum(p['px_w'] for p in panels) + GAP * (len(panels) - 1)
+
+          lines = [
+              '<?xml version="1.0" encoding="UTF-8" standalone="no"?>',
+              f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"'
+              f' width="{total_w}" height="{PX_H}" viewBox="0 0 {total_w} {PX_H}">',
+          ]
+          x = 0
+          for p in panels:
+              x0,y0,w,h = p['bbox']
+              pw = p['px_w']
+              lines += [
+                  f'  <rect x="{x}" y="0" width="{pw}" height="{PX_H}" fill="{p["bg"]}"/>',
+                  f'  <svg x="{x}" y="0" width="{pw}" height="{PX_H}"'
+                  f' viewBox="{x0:.3f} {y0:.3f} {w:.3f} {h:.3f}" preserveAspectRatio="xMidYMid meet">',
+                  inner_svg(p['content'], p['prefix']),
+                  '  </svg>',
+              ]
+              x += pw + GAP
+          lines.append('</svg>')
+
+          with open(out_file, 'w') as f: f.write('\n'.join(lines))
+          print(f"Preview: {out_file} ({total_w}x{PX_H}px)")
+          PYEOF
+
+          # BOM generator: parses .kicad_sch, groups components, outputs markdown table.
+          cat > /tmp/gen_bom.py << 'PYEOF'
+          import sys, re
+          from collections import defaultdict
+
+          def parse_bom(sch_file):
+              with open(sch_file, encoding='utf-8') as f:
+                  txt = f.read()
+
+              # Remove lib_symbols block (library definitions, not placed instances)
+              i = txt.find('(lib_symbols')
+              if i >= 0:
+                  d, j = 0, i
+                  while j < len(txt):
+                      if txt[j] == '(': d += 1
+                      elif txt[j] == ')':
+                          d -= 1
+                          if d == 0: break
+                      j += 1
+                  txt = txt[:i] + txt[j+1:]
+
+              # Walk placed symbol instances: (symbol (lib_id "...") ...)
+              comps, i = [], 0
+              while True:
+                  idx = txt.find('(symbol', i)
+                  if idx < 0: break
+                  if not txt[idx+7:idx+100].lstrip().startswith('(lib_id'):
+                      i = idx + 1; continue
+                  d, j = 0, idx
+                  while j < len(txt):
+                      if txt[j] == '(': d += 1
+                      elif txt[j] == ')':
+                          d -= 1
+                          if d == 0: break
+                      j += 1
+                  blk = txt[idx:j+1]; i = j + 1
+
+                  def prop(name):
+                      m = re.search(rf'\(property "{re.escape(name)}" "([^"]*)"', blk)
+                      return m.group(1).strip() if m else ''
+
+                  ref = prop('Reference')
+                  if not ref or ref.startswith('#'): continue        # skip power symbols
+                  if re.search(r'\(in_bom\s+no\)', blk): continue   # skip excluded
+
+                  value    = prop('Value')
+                  fp_full  = prop('Footprint')
+                  fp       = fp_full.split(':')[-1] if ':' in fp_full else fp_full
+                  lcsc     = (prop('LCSC') or prop('LCSC Part') or
+                               prop('LCSC_Part') or prop('JlcPcb') or '')
+                  dnp      = bool(re.search(r'\(dnp\s+yes\)', blk))
+                  comps.append((ref, value, fp, lcsc, dnp))
+
+              if not comps:
+                  return ''
+
+              groups = defaultdict(list)
+              for ref, value, fp, lcsc, dnp in comps:
+                  groups[(value, fp, lcsc, dnp)].append(ref)
+
+              def sref(r):
+                  m = re.match(r'([A-Za-z_]+)(\d+)', r)
+                  return (m.group(1), int(m.group(2))) if m else (r, 0)
+
+              for k in groups: groups[k].sort(key=sref)
+
+              rows = [('Refs', 'Value', 'Footprint', 'LCSC'),
+                      ('---',  '---',   '---',        '---')]
+              for (value, fp, lcsc, dnp), refs in sorted(groups.items(), key=lambda x: sref(x[1][0])):
+                  ref_str = ', '.join(refs) + (' *(DNP)*' if dnp else '')
+                  rows.append((ref_str, value or '—', fp or '—', lcsc or '—'))
+
+              return '\n'.join('| ' + ' | '.join(r) + ' |' for r in rows)
+
+          print(parse_bom(sys.argv[1]))
+          PYEOF
+
+          git fetch origin ${{ github.base_ref }}
+          changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep '^blocks\.kicad_blocks/' | cut -d'/' -f1-2 | sort -u)
+
+          for block_dir in $changed; do
+            [ -d "$block_dir" ] || continue
+            block_name=$(basename "$block_dir" .kicad_block)
+
+            sch="$block_dir/${block_name}.kicad_sch"
+            pcb="$block_dir/${block_name}.kicad_pcb"
+            sch_tmp="$block_dir/${block_name}_sch.svg"
+            pcb_tmp="$block_dir/${block_name}_pcb.svg"
+            preview="$block_dir/${block_name}_preview.svg"
+
+            if [ -f "$sch" ]; then
+              rm -f "$sch_tmp"
+              kicad-cli sch export svg --exclude-drawing-sheet --no-background-color --output "$block_dir" "$sch"
+              mv "$block_dir/${block_name}.svg" "$sch_tmp"
+            fi
+
+            if [ -f "$pcb" ]; then
+              kicad-cli pcb export svg --exclude-drawing-sheet \
+                --layers F.Cu,B.Cu,F.Silkscreen,B.Silkscreen,Edge.Cuts,F.Fab,B.Fab \
+                --output "$pcb_tmp" "$pcb"
+            fi
+
+            python3 /tmp/combine_svg.py "$sch_tmp" "$pcb_tmp" "$preview"
+            rm -f "$sch_tmp" "$pcb_tmp"
+
+            if [ -f "$sch" ]; then
+              python3 /tmp/gen_bom.py "$sch" > "$block_dir/${block_name}_bom.md"
+            fi
+          done
+
+      - name: Push previews to preview branch
+        id: push
+        run: |
+          preview_branch="previews/pr-${{ github.event.number }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin ${{ github.base_ref }}
+          find blocks.kicad_blocks -name "*_preview.svg" | xargs git add --
+          if git diff --staged --quiet; then
+            echo "no_changes=true" >> $GITHUB_OUTPUT
+          else
+            git commit -m "chore: PR ${{ github.event.number }} preview SVGs"
+            git push origin HEAD:refs/heads/$preview_branch --force
+            echo "branch=$preview_branch" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post preview comment
+        if: steps.push.outputs.no_changes != 'true'
+        uses: actions/github-script@v8
+        env:
+          PREVIEW_BRANCH: ${{ steps.push.outputs.branch }}
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            const fs = require('fs');
+            const branch = process.env.PREVIEW_BRANCH;
+            const repo = context.repo;
+            const base = `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${branch}`;
+
+            const svgs = execSync('find blocks.kicad_blocks -name "*_preview.svg" 2>/dev/null || true')
+              .toString().trim().split('\n').filter(Boolean);
+
+            const blocks = {};
+            for (const svg of svgs) {
+              const m = svg.match(/blocks\.kicad_blocks\/(.+)\.kicad_block\/.+_preview\.svg/);
+              if (!m) continue;
+              blocks[m[1]] = { url: `${base}/${svg}`, bom: '' };
+            }
+
+            // Read BOM markdown files generated in the previous step
+            for (const name of Object.keys(blocks)) {
+              const bomPath = `blocks.kicad_blocks/${name}.kicad_block/${name}_bom.md`;
+              try { blocks[name].bom = fs.readFileSync(bomPath, 'utf8').trim(); } catch {}
+            }
+
+            let body = '## Block Previews\n\n';
+            for (const [name, { url, bom }] of Object.entries(blocks)) {
+              body += `### ${name}\n`;
+              body += `![preview](${url})\n\n`;
+              if (bom) body += `**BOM**\n${bom}\n\n`;
+            }
+
+            await github.rest.issues.createComment({
+              ...repo,
+              issue_number: context.payload.pull_request.number,
+              body
+            });
+
+  cleanup:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete preview branch
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const branch = `previews/pr-${{ github.event.number }}`;
+            try {
+              await github.rest.git.deleteRef({
+                ...context.repo,
+                ref: `heads/${branch}`
+              });
+            } catch (e) {
+              // Branch might not exist, ignore
+            }

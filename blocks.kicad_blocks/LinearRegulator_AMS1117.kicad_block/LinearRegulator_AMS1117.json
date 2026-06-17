@@ -4,7 +4,7 @@
 "fields": {
   "maturity": "schematic",
   "lcsc_parts": "yes",
-  "lcsc_basic_optimized": "yes",
+  "jlcpcb_basic": "yes",
   "has_3d": "no",
   "reviewed": "no"
 }

@@ -1,8 +1,13 @@
-# KiCad backup files
+# KiCad backup and generated files
 *.bak
 *.kicad_sch-bak
 *.kicad_pcb-bak
+*.kicad_prl
 *-backups/
+
+# Auto-generated per-block files (committed by CI, not by contributors)
+*.kicad_block/README.md
+*.kicad_block/*_preview.svg
 
 # OS
 .DS_Store

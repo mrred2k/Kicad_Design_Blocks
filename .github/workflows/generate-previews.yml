@@ -1,0 +1,310 @@
+# Runs after every push to main that touches blocks.kicad_blocks/, and can be triggered manually.
+# Uses the official kicad/kicad:10.0 Docker image — no installation step needed.
+# Exports schematic and PCB layout as SVGs and combines them into a single side-by-side preview,
+# then commits the combined preview back to the repo.
+name: Generate block previews
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'blocks.kicad_blocks/**'
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    container:
+      image: kicad/kicad:10.0
+      options: --user root
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Sync with remote
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+
+      - name: Generate combined SVG previews
+        run: |
+          # Script: compute bounding boxes for schematic and PCB SVGs,
+          # then combine them side-by-side into a single preview SVG.
+          # Schematic gets a white background, PCB gets a dark background.
+          cat > /tmp/combine_svg.py << 'PYEOF'
+          import xml.etree.ElementTree as ET, re, sys, os
+
+          def nums(s):
+              return [float(x) for x in re.findall(r'[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?', s or '')]
+
+          def pf(s, d=0.0):
+              n = nums(s); return n[0] if n else d
+
+          def path_coords(d):
+              """Parse SVG path data respecting command syntax.
+              Arc commands (A/a) have 7 params: rx ry rotation large-arc sweep x y.
+              Naive number-pair splitting treats rx/ry/rotation/flags as coords, which
+              pulls the bounding box toward zero. This parser skips them correctly."""
+              tks = re.findall(r'[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?', d)
+              xs, ys, cx, cy, i = [], [], 0.0, 0.0, 0
+              def g(n):
+                  nonlocal i
+                  v = [float(tks[i+j]) for j in range(n)]; i += n; return v
+              while i < len(tks):
+                  c = tks[i]; i += 1
+                  if not c.isalpha(): continue
+                  rel = c.islower()
+                  try:
+                      while i < len(tks) and not tks[i].isalpha():
+                          if c in 'Mm':
+                              x,y = g(2)
+                              if rel: x,y = cx+x,cy+y
+                              xs.append(x); ys.append(y); cx,cy = x,y; c = 'l' if c=='m' else 'L'
+                          elif c in 'Ll':
+                              x,y = g(2)
+                              if rel: x,y = cx+x,cy+y
+                              xs.append(x); ys.append(y); cx,cy = x,y
+                          elif c in 'Hh':
+                              x = g(1)[0]
+                              if rel: x = cx+x
+                              xs.append(x); cx = x
+                          elif c in 'Vv':
+                              y = g(1)[0]
+                              if rel: y = cy+y
+                              ys.append(y); cy = y
+                          elif c in 'CcSs':
+                              v = g(6 if c in 'Cc' else 4); x,y = v[-2],v[-1]
+                              if rel: x,y = cx+x,cy+y
+                              xs.append(x); ys.append(y); cx,cy = x,y
+                          elif c in 'QqTt':
+                              v = g(4 if c in 'Qq' else 2); x,y = v[-2],v[-1]
+                              if rel: x,y = cx+x,cy+y
+                              xs.append(x); ys.append(y); cx,cy = x,y
+                          elif c in 'Aa':
+                              v = g(7); x,y = v[5],v[6]
+                              if rel: x,y = cx+x,cy+y
+                              xs.append(x); ys.append(y); cx,cy = x,y
+                          elif c in 'Zz': break
+                  except (IndexError, ValueError): pass
+              return xs, ys
+
+          def get_bbox(content):
+              try:
+                  tree = ET.fromstring(content)
+              except ET.ParseError:
+                  return None
+              # Skip <defs>: marker/arrowhead definitions have coords near (0,0)
+              # and would incorrectly extend the bounding box.
+              skip = set()
+              for el in tree.iter():
+                  if (el.tag.split('}')[-1] if '}' in el.tag else el.tag) == 'defs':
+                      skip.add(id(el))
+                      for child in el.iter(): skip.add(id(child))
+              vb_m = re.search(r'viewBox="([^"]+)"', content)
+              page_w = page_h = 1e6
+              if vb_m:
+                  vb = [float(x) for x in vb_m.group(1).split()]
+                  if len(vb) >= 4: page_w, page_h = vb[2], vb[3]
+              all_x, all_y = [], []
+              for elem in tree.iter():
+                  if id(elem) in skip: continue
+                  tag = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+                  if tag == 'rect':
+                      x,y,w,h = pf(elem.get('x')),pf(elem.get('y')),pf(elem.get('width')),pf(elem.get('height'))
+                      # Skip rects covering >90% of the page (background fills)
+                      if 0 < w < page_w * 0.9 and 0 < h < page_h * 0.9:
+                          all_x+=[x,x+w]; all_y+=[y,y+h]
+                  elif tag == 'line':
+                      all_x+=[pf(elem.get('x1')),pf(elem.get('x2'))]; all_y+=[pf(elem.get('y1')),pf(elem.get('y2'))]
+                  elif tag == 'circle':
+                      cx,cy,r=pf(elem.get('cx')),pf(elem.get('cy')),pf(elem.get('r'))
+                      all_x+=[cx-r,cx+r]; all_y+=[cy-r,cy+r]
+                  elif tag in ('polyline','polygon'):
+                      ns=nums(elem.get('points','')); all_x+=ns[0::2]; all_y+=ns[1::2]
+                  elif tag == 'path':
+                      px,py = path_coords(elem.get('d','')); all_x+=px; all_y+=py
+                  tx,ty=elem.get('x'),elem.get('y')
+                  if tx and ty:
+                      txf,tyf=pf(tx),pf(ty)
+                      if abs(txf)<1e5 and abs(tyf)<1e5: all_x.append(txf); all_y.append(tyf)
+              if not all_x or not all_y: return None
+              span = max(max(all_x)-min(all_x), max(all_y)-min(all_y))
+              pad = max(span * 0.03, 1.0)
+              x0,y0 = min(all_x)-pad, min(all_y)-pad
+              w,h   = max(all_x)-min(all_x)+2*pad, max(all_y)-min(all_y)+2*pad
+              return (x0, y0, w, h)
+
+          def inner_svg(content, prefix):
+              """Extract inner SVG content, prefixing IDs to avoid conflicts between panels."""
+              content = re.sub(r'\bid="', f'id="{prefix}_', content)
+              content = re.sub(r'url\(#', f'url(#{prefix}_', content)
+              content = re.sub(r'href="#', f'href="#{prefix}_', content)
+              start = re.search(r'<svg\b[^>]*>', content, re.DOTALL)
+              if not start: return ''
+              last = content.rfind('</svg>')
+              return content[start.end():last] if last > start.end() else ''
+
+          sch_file = sys.argv[1] if len(sys.argv) > 1 else ''
+          pcb_file = sys.argv[2] if len(sys.argv) > 2 else ''
+          out_file = sys.argv[3] if len(sys.argv) > 3 else 'preview.svg'
+
+          PX_H = 500  # fixed panel height in pixels; width scales with aspect ratio
+          GAP  = 8
+
+          panels = []
+          for fname, bg, prefix in [(sch_file, '#ffffff', 'sch'), (pcb_file, '#1a1a1a', 'pcb')]:
+              if not fname or not os.path.exists(fname): continue
+              with open(fname) as f: content = f.read()
+              bbox = get_bbox(content)
+              if not bbox: continue
+              x0,y0,w,h = bbox
+              px_w = max(1, int(PX_H * w / h)) if h > 0 else PX_H
+              panels.append({'content': content, 'bbox': bbox, 'bg': bg, 'prefix': prefix, 'px_w': px_w})
+
+          if not panels:
+              print(f"No content for {out_file}"); sys.exit(0)
+
+          total_w = sum(p['px_w'] for p in panels) + GAP * (len(panels) - 1)
+
+          lines = [
+              '<?xml version="1.0" encoding="UTF-8" standalone="no"?>',
+              f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"'
+              f' width="{total_w}" height="{PX_H}" viewBox="0 0 {total_w} {PX_H}">',
+          ]
+          x = 0
+          for p in panels:
+              x0,y0,w,h = p['bbox']
+              pw = p['px_w']
+              lines += [
+                  f'  <rect x="{x}" y="0" width="{pw}" height="{PX_H}" fill="{p["bg"]}"/>',
+                  f'  <svg x="{x}" y="0" width="{pw}" height="{PX_H}"'
+                  f' viewBox="{x0:.3f} {y0:.3f} {w:.3f} {h:.3f}" preserveAspectRatio="xMidYMid meet">',
+                  inner_svg(p['content'], p['prefix']),
+                  '  </svg>',
+              ]
+              x += pw + GAP
+          lines.append('</svg>')
+
+          with open(out_file, 'w') as f: f.write('\n'.join(lines))
+          print(f"Preview: {out_file} ({total_w}x{PX_H}px)")
+          PYEOF
+
+          # README generator: reads the block JSON + schematic, writes README.md.
+          cat > /tmp/gen_readme.py << 'PYEOF'
+          import sys, json, os, re
+          from collections import defaultdict
+          from pathlib import Path
+
+          def parse_bom(sch_file):
+              with open(sch_file, encoding='utf-8') as f: txt = f.read()
+              i = txt.find('(lib_symbols')
+              if i >= 0:
+                  d, j = 0, i
+                  while j < len(txt):
+                      if txt[j]=='(': d+=1
+                      elif txt[j]==')':
+                          d-=1
+                          if d==0: break
+                      j+=1
+                  txt = txt[:i]+txt[j+1:]
+              comps, i = [], 0
+              while True:
+                  idx = txt.find('(symbol', i)
+                  if idx < 0: break
+                  if not txt[idx+7:idx+100].lstrip().startswith('(lib_id'):
+                      i = idx+1; continue
+                  d, j = 0, idx
+                  while j < len(txt):
+                      if txt[j]=='(': d+=1
+                      elif txt[j]==')':
+                          d-=1
+                          if d==0: break
+                      j+=1
+                  blk = txt[idx:j+1]; i = j+1
+                  def prop(name):
+                      m = re.search(rf'\(property "{re.escape(name)}" "([^"]*)"', blk)
+                      return m.group(1).strip() if m else ''
+                  ref = prop('Reference')
+                  if not ref or ref.startswith('#'): continue
+                  if re.search(r'\(in_bom\s+no\)', blk): continue
+                  fp = prop('Footprint'); fp = fp.split(':')[-1] if ':' in fp else fp
+                  lcsc = prop('LCSC') or prop('LCSC Part') or prop('LCSC_Part') or prop('JlcPcb') or ''
+                  dnp = bool(re.search(r'\(dnp\s+yes\)', blk))
+                  comps.append((ref, prop('Value'), fp, lcsc, dnp))
+              if not comps: return ''
+              groups = defaultdict(list)
+              for ref,val,fp,lcsc,dnp in comps: groups[(val,fp,lcsc,dnp)].append(ref)
+              def sref(r):
+                  m = re.match(r'([A-Za-z_]+)(\d+)', r)
+                  return (m.group(1), int(m.group(2))) if m else (r, 0)
+              for k in groups: groups[k].sort(key=sref)
+              rows = [('Refs','Value','Footprint','LCSC'), ('---','---','---','---')]
+              for (val,fp,lcsc,dnp),refs in sorted(groups.items(), key=lambda x: sref(x[1][0])):
+                  r = ', '.join(refs)+(' *(DNP)*' if dnp else '')
+                  rows.append((r, val or '—', fp or '—', lcsc or '—'))
+              return '\n'.join('| '+' | '.join(r)+' |' for r in rows)
+
+          block_dir  = sys.argv[1]
+          block_name = Path(block_dir).name.removesuffix('.kicad_block')
+
+          json_path = os.path.join(block_dir, f'{block_name}.json')
+          meta = json.load(open(json_path)) if os.path.exists(json_path) else {}
+          fields = meta.get('fields', {})
+
+          sch_path = os.path.join(block_dir, f'{block_name}.kicad_sch')
+          bom = parse_bom(sch_path) if os.path.exists(sch_path) else ''
+
+          lines = [f'# {block_name}', '']
+          if meta.get('description'): lines += [meta['description'], '']
+          lines += [f'![preview]({block_name}_preview.svg)', '']
+          if bom: lines += ['## Bill of Materials', '', bom, '']
+
+          field_labels = [('maturity','Maturity'), ('lcsc_parts','LCSC parts'),
+                          ('jlcpcb_basic','JLCPCB Basic'), ('has_3d','3D models'), ('reviewed','Reviewed')]
+          parts = []
+          if meta.get('keywords'): parts.append(f'**Keywords:** {meta["keywords"]}')
+          for key, label in field_labels:
+              if fields.get(key): parts.append(f'**{label}:** {fields[key]}')
+          if parts: lines += ['---', ' · '.join(parts), '']
+
+          open(os.path.join(block_dir, 'README.md'), 'w').write('\n'.join(lines))
+          print(f'README: {block_dir}/README.md')
+          PYEOF
+
+          for block_dir in blocks.kicad_blocks/*.kicad_block; do
+            [ -d "$block_dir" ] || continue
+            block_name=$(basename "$block_dir" .kicad_block)
+
+            sch="$block_dir/${block_name}.kicad_sch"
+            pcb="$block_dir/${block_name}.kicad_pcb"
+            sch_tmp="$block_dir/${block_name}_sch.svg"
+            pcb_tmp="$block_dir/${block_name}_pcb.svg"
+            preview="$block_dir/${block_name}_preview.svg"
+
+            if [ -f "$sch" ]; then
+              rm -f "$sch_tmp"
+              kicad-cli sch export svg --exclude-drawing-sheet --no-background-color --output "$block_dir" "$sch"
+              mv "$block_dir/${block_name}.svg" "$sch_tmp"
+            fi
+
+            if [ -f "$pcb" ]; then
+              kicad-cli pcb export svg --exclude-drawing-sheet \
+                --layers F.Cu,B.Cu,F.Silkscreen,B.Silkscreen,Edge.Cuts,F.Fab,B.Fab \
+                --output "$pcb_tmp" "$pcb"
+            fi
+
+            python3 /tmp/combine_svg.py "$sch_tmp" "$pcb_tmp" "$preview"
+            rm -f "$sch_tmp" "$pcb_tmp"
+            python3 /tmp/gen_readme.py "$block_dir"
+          done
+
+      - name: Commit previews
+        run: |
+          # --force overrides .gitignore (these files are generated by CI, not contributors)
+          find blocks.kicad_blocks -name "*_preview.svg" | xargs git add --force --
+          find blocks.kicad_blocks -name "README.md"    | xargs git add --force --
+          git diff --staged --quiet || git commit -m "chore: regenerate block previews"
+          git push
