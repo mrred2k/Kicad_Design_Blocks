@@ -2,6 +2,8 @@
 
 # LinearRegulator_AMS1117
 
+[![Schematic](https://img.shields.io/badge/Quality-Schematic-9E9E9E?style=flat-square)](../../CONTRIBUTING.md#quality-scale) ![auto-generated](https://img.shields.io/badge/auto--generated-CI-lightgrey?style=flat-square)
+
 LDO linear regulator, Vin 5V, Vout 3.3V fixed, 1A max, AMS1117-3.3 (SOT-223)
 
 ![preview](LinearRegulator_AMS1117_preview.svg)
@@ -23,6 +25,6 @@ LDO linear regulator, Vin 5V, Vout 3.3V fixed, 1A max, AMS1117-3.3 (SOT-223)
 |---|---|
 | Maturity | Schematic |
 | LCSC Parts | Yes |
-| JLCPCB Basic | Yes |
+| JLCPCB | Optimized for Basic Parts |
 | 3D Models | No |
 | Reviewed | No |

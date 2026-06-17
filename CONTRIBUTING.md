@@ -44,6 +44,26 @@ THT components that require hand soldering should be mentioned in the Descriptio
 
 Do not add a `README.md` inside a block folder — it is auto-generated on merge and will be overwritten. Extra context belongs in the `description` field of the block's `.json` file.
 
+## Quality Scale
+
+Every block gets an automatic quality badge based on its metadata. Aim high — a **Silver** or better block is immediately usable by anyone without extra research.
+
+| | ![Wood](https://img.shields.io/badge/Quality-Wood-8B5E3C?style=flat-square) | ![Bronze](https://img.shields.io/badge/Quality-Bronze-8D6E63?style=flat-square) | ![Silver](https://img.shields.io/badge/Quality-Silver-607D8B?style=flat-square) | ![Gold](https://img.shields.io/badge/Quality-Gold-FF8F00?style=flat-square) | ![Platinum](https://img.shields.io/badge/Quality-Platinum-6554C0?style=flat-square) |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Has schematic | ✅ | ✅ | ✅ | ✅ | ✅ |
+| PCB layout | ❌ | ✅ | ✅ | ✅ | ✅ |
+| LCSC part numbers | ❌ | ✅ | ✅ | ✅ | ✅ |
+| JLCPCB Basic parts where possible | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Manufactured & tested | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Peer reviewed | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+The badge is computed automatically from the metadata fields in the block's `.json`. To move up:
+
+- **Wood → Bronze**: add a PCB layout and fill in LCSC part numbers for all components (`lcsc_parts: yes`)
+- **Bronze → Silver**: choose JLCPCB Basic Parts where possible (`jlcpcb_basic: yes`)
+- **Silver → Gold**: build and test the board, then set `maturity: produced`
+- **Gold → Platinum**: have another contributor review the block and set `reviewed: yes` when merging
+
 ## CI / Automation
 
 Three workflows run automatically:

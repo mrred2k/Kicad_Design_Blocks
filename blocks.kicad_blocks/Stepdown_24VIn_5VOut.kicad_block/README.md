@@ -2,6 +2,8 @@
 
 # Stepdown_24VIn_5VOut
 
+[![Silver](https://img.shields.io/badge/Quality-Silver-607D8B?style=flat-square)](../../CONTRIBUTING.md#quality-scale) ![auto-generated](https://img.shields.io/badge/auto--generated-CI-lightgrey?style=flat-square)
+
 Buck (step-down) DC/DC converter, Vin max 32V, Vout fixed 5V
 
 ![preview](Stepdown_24VIn_5VOut_preview.svg)
@@ -26,6 +28,6 @@ Buck (step-down) DC/DC converter, Vin max 32V, Vout fixed 5V
 |---|---|
 | Maturity | Layout |
 | LCSC Parts | Yes |
-| JLCPCB Basic | Yes |
+| JLCPCB | Optimized for Basic Parts |
 | 3D Models | Yes |
 | Reviewed | No |

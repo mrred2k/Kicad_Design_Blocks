@@ -2,6 +2,8 @@
 
 # USB-C_Socket_HID
 
+[![Silver](https://img.shields.io/badge/Quality-Silver-607D8B?style=flat-square)](../../CONTRIBUTING.md#quality-scale) ![auto-generated](https://img.shields.io/badge/auto--generated-CI-lightgrey?style=flat-square)
+
 USB 2.0 Type-C receptacle, low-speed HID device, CC resistors for 5V power negotiation, ESD protection on D+/D-
 
 ![preview](USB-C_Socket_HID_preview.svg)
@@ -25,6 +27,6 @@ USB 2.0 Type-C receptacle, low-speed HID device, CC resistors for 5V power negot
 |---|---|
 | Maturity | Layout |
 | LCSC Parts | Yes |
-| JLCPCB Basic | Yes |
+| JLCPCB | Optimized for Basic Parts |
 | 3D Models | Yes |
 | Reviewed | No |

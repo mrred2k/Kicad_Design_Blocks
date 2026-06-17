@@ -2,6 +2,8 @@
 
 # Mosfet_Pair_24VfromMCU
 
+[![Silver](https://img.shields.io/badge/Quality-Silver-607D8B?style=flat-square)](../../CONTRIBUTING.md#quality-scale) ![auto-generated](https://img.shields.io/badge/auto--generated-CI-lightgrey?style=flat-square)
+
 Low-side switch for 24V loads, BJT-driven N-ch MOSFET (AO3400A), active high, MCU-compatible input, status LED included
 
 ![preview](Mosfet_Pair_24VfromMCU_preview.svg)
@@ -25,6 +27,6 @@ Low-side switch for 24V loads, BJT-driven N-ch MOSFET (AO3400A), active high, MC
 |---|---|
 | Maturity | Layout |
 | LCSC Parts | Yes |
-| JLCPCB Basic | Yes |
+| JLCPCB | Optimized for Basic Parts |
 | 3D Models | Yes |
 | Reviewed | No |

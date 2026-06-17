@@ -2,6 +2,8 @@
 
 # LinearRegulator_XC6206P
 
+[![Silver](https://img.shields.io/badge/Quality-Silver-607D8B?style=flat-square)](../../CONTRIBUTING.md#quality-scale) ![auto-generated](https://img.shields.io/badge/auto--generated-CI-lightgrey?style=flat-square)
+
 LDO linear regulator, Vin 5V, Vout 3.3V fixed, 250mA max, XC6206P (SOT-23-3)
 
 ![preview](LinearRegulator_XC6206P_preview.svg)
@@ -22,6 +24,6 @@ LDO linear regulator, Vin 5V, Vout 3.3V fixed, 250mA max, XC6206P (SOT-23-3)
 |---|---|
 | Maturity | Layout |
 | LCSC Parts | Yes |
-| JLCPCB Basic | Yes |
+| JLCPCB | Optimized for Basic Parts |
 | 3D Models | Yes |
 | Reviewed | No |

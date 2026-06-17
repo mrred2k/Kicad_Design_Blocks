@@ -288,6 +288,17 @@ jobs:
               table = '\n'.join('| '+' | '.join(r)+' |' for r in rows)
               return '*Manufacturer and MPN fetched automatically from [LCSC](https://lcsc.com).*\n\n' + table
 
+          def quality_tier(fields):
+              maturity = fields.get('maturity', '')
+              lcsc     = fields.get('lcsc_parts')   == 'yes'
+              jlcpcb   = fields.get('jlcpcb_basic') == 'yes'
+              reviewed = fields.get('reviewed')     == 'yes'
+              if maturity == 'produced' and reviewed: return 'Platinum', '6554C0'
+              if maturity == 'produced':              return 'Gold',     'FF8F00'
+              if maturity == 'layout' and lcsc and jlcpcb: return 'Silver', '607D8B'
+              if maturity == 'layout' and lcsc:       return 'Bronze',   '8D6E63'
+              return 'Wood', '8B5E3C'
+
           block_dir  = sys.argv[1]
           block_name = Path(block_dir).name.removesuffix('.kicad_block')
 
@@ -298,22 +309,34 @@ jobs:
           sch_path = os.path.join(block_dir, f'{block_name}.kicad_sch')
           bom = parse_bom(sch_path) if os.path.exists(sch_path) else ''
 
+          tier, color = quality_tier(fields)
+          q_img    = f'https://img.shields.io/badge/Quality-{tier}-{color}?style=flat-square'
+          q_badge  = f'[![{tier}]({q_img})](../../CONTRIBUTING.md#quality-scale)'
+          ci_badge = '![auto-generated](https://img.shields.io/badge/auto--generated-CI-lightgrey?style=flat-square)'
+
           autogen = '<!-- AUTO-GENERATED — do not edit, this file is overwritten on every push to main -->'
-          lines = [autogen, '', f'# {block_name}', '']
+          lines = [autogen, '', f'# {block_name}', '', f'{q_badge} {ci_badge}', '']
           if meta.get('description'): lines += [meta['description'], '']
           lines += [f'![preview]({block_name}_preview.svg)', '']
           if bom: lines += ['## Bill of Materials', '', bom, '']
 
           field_labels = [('maturity','Maturity'), ('lcsc_parts','LCSC Parts'),
-                          ('jlcpcb_basic','JLCPCB Basic'), ('has_3d','3D Models'), ('reviewed','Reviewed')]
-          present = [(label, fields[key]) for key, label in field_labels if fields.get(key)]
+                          ('jlcpcb_basic','JLCPCB'), ('has_3d','3D Models'), ('reviewed','Reviewed')]
+          present = []
+          for key, label in field_labels:
+              val = fields.get(key, '')
+              if not val: continue
+              if key == 'jlcpcb_basic' and val == 'yes':
+                  present.append((label, 'Optimized for Basic Parts'))
+              else:
+                  present.append((label, val.capitalize()))
           if present or meta.get('keywords'):
               lines.append('---')
               if meta.get('keywords'): lines += [f'*Keywords: {meta["keywords"]}*', '']
               if present:
                   lines += ['| | |', '|---|---|']
                   for lbl, val in present:
-                      lines.append(f'| {lbl} | {val.capitalize()} |')
+                      lines.append(f'| {lbl} | {val} |')
                   lines.append('')
 
           open(os.path.join(block_dir, 'README.md'), 'w').write('\n'.join(lines))
