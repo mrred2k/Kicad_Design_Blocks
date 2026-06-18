@@ -259,6 +259,55 @@ jobs:
           print(parse_bom(sys.argv[1]))
           PYEOF
 
+          # JLCPCB Basic Parts hint: fetches part class from EasyEDA and suggests
+          # setting jlcpcb_basic: yes if most parts are already Basic.
+          cat > /tmp/check_jlcpcb.py << 'PYEOF'
+          import sys, json, re, os, urllib.request, time
+
+          def fetch_jlc(lcsc_id):
+              try:
+                  url = f'https://easyeda.com/api/products/{lcsc_id}/components'
+                  req = urllib.request.Request(url, headers={
+                      'Accept': 'application/json',
+                      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0.0.0',
+                      'Referer': 'https://easyeda.com/',
+                  })
+                  with urllib.request.urlopen(req, timeout=8) as r:
+                      data = json.loads(r.read())
+                  if not data.get('success'): return ''
+                  ds = data['result']['dataStr']
+                  if isinstance(ds, str): ds = json.loads(ds)
+                  time.sleep(0.3)
+                  return ds['head']['c_para'].get('JLCPCB Part Class', '')
+              except:
+                  return ''
+
+          block_dir  = sys.argv[1]
+          block_name = os.path.basename(block_dir).removesuffix('.kicad_block')
+
+          json_path = os.path.join(block_dir, f'{block_name}.json')
+          if not os.path.exists(json_path): sys.exit(0)
+          meta = json.load(open(json_path))
+          if meta.get('fields', {}).get('jlcpcb_basic') == 'yes': sys.exit(0)
+
+          sch_path = os.path.join(block_dir, f'{block_name}.kicad_sch')
+          if not os.path.exists(sch_path): sys.exit(0)
+          with open(sch_path, encoding='utf-8') as f: txt = f.read()
+
+          lcsc_ids = list({m for m in re.findall(
+              r'\(property "(?:LCSC|LCSC Part|LCSC_Part|JlcPcb)" "([^"]+)"', txt) if m})
+          if not lcsc_ids: sys.exit(0)
+
+          classes  = [fetch_jlc(lid) for lid in lcsc_ids]
+          resolved = [c for c in classes if c]
+          basic    = sum(1 for c in resolved if 'Basic' in c)
+          if not resolved: sys.exit(0)
+
+          if basic / len(resolved) >= 0.6:
+              with open('/tmp/jlcpcb_hints.txt', 'a') as f:
+                  f.write(f'{block_name}\t{basic}/{len(resolved)}\n')
+          PYEOF
+
           git fetch origin ${{ github.base_ref }}
           changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
             | grep '^blocks\.kicad_blocks/' | cut -d'/' -f1-2 | sort -u)
@@ -291,6 +340,7 @@ jobs:
 
             if [ -f "$sch" ]; then
               python3 /tmp/gen_bom.py "$sch" > "$block_dir/${block_name}_bom.md"
+              python3 /tmp/check_jlcpcb.py "$block_dir"
             fi
           done
 
@@ -350,6 +400,18 @@ jobs:
               body += `![preview](${url})\n\n`;
               if (bom) body += `**BOM**\n${bom}\n\n`;
             }
+
+            try {
+              const hints = fs.readFileSync('/tmp/jlcpcb_hints.txt', 'utf8')
+                .trim().split('\n').filter(Boolean);
+              if (hints.length > 0) {
+                body += '---\n';
+                for (const line of hints) {
+                  const [name, count] = line.split('\t');
+                  body += `> **Hint:** ${count} parts in \`${name}\` are JLCPCB Basic — consider setting \`"jlcpcb_basic": "yes"\` in \`${name}.json\`\n`;
+                }
+              }
+            } catch {}
 
             await github.rest.issues.createComment({
               ...repo,
