@@ -1,0 +1,11 @@
+{
+  "description": "Buck-boost 3.3V from single Li-Ion, TPS63011YFFR DSBGA-20 2A switches, 2.2uH, 3x10uF",
+  "keywords": "buck boost 3V3 tps63011 lipo battery dsbga",
+  "fields": {
+    "maturity": "schematic",
+    "lcsc_parts": "yes",
+    "jlcpcb_basic": "no",
+    "has_3d": "no",
+    "reviewed": "no"
+  }
+}
