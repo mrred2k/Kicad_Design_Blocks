@@ -1,0 +1,11 @@
+{
+  "description": "I2C pull-up resistors 4.7k 0603 for 3.3V bus, one pair per block",
+  "keywords": "i2c pullup 4k7 0603 3V3",
+  "fields": {
+    "maturity": "schematic",
+    "lcsc_parts": "yes",
+    "jlcpcb_basic": "yes",
+    "has_3d": "no",
+    "reviewed": "no"
+  }
+}
