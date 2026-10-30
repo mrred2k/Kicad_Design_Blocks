@@ -205,32 +205,38 @@ jobs:
           _lcsc_cache = {}
 
           def fetch_lcsc(lcsc_id):
+              # Source: JLCPCB's own parts API. The EasyEDA endpoint used before answers
+              # HTTP 403 to automated requests (verified from CI and from a normal IP),
+              # so every BOM column stayed "—". The JLC endpoint needs no auth.
               if not lcsc_id or lcsc_id in _lcsc_cache:
                   return _lcsc_cache.get(lcsc_id, {})
               try:
-                  url = f'https://easyeda.com/api/products/{lcsc_id}/components'
-                  req = urllib.request.Request(url, headers={
+                  url = 'https://jlcpcb.com/api/overseas-pcb-order/v1/shoppingCart/smtGood/selectSmtComponentList'
+                  body = _json.dumps({'currentPage': 1, 'pageSize': 5, 'keyword': lcsc_id}).encode()
+                  req = urllib.request.Request(url, data=body, headers={
+                      'Content-Type': 'application/json',
                       'Accept': 'application/json',
                       'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0.0.0',
-                      'Referer': 'https://easyeda.com/',
+                      'Origin': 'https://jlcpcb.com',
+                      'Referer': 'https://jlcpcb.com/parts',
                   })
-                  with urllib.request.urlopen(req, timeout=8) as r:
+                  with urllib.request.urlopen(req, timeout=15) as r:
                       data = _json.loads(r.read())
-                  if not data.get('success'):
+                  lst = (((data.get('data') or {}).get('componentPageInfo') or {}).get('list') or [])
+                  # The keyword search can return similar parts - only accept the exact code.
+                  hit = next((c for c in lst
+                              if (c.get('componentCode') or '').upper() == lcsc_id.upper()), None)
+                  if not hit:
                       _lcsc_cache[lcsc_id] = {}; return {}
-                  dataStr = data['result']['dataStr']
-                  if isinstance(dataStr, str): dataStr = _json.loads(dataStr)
-                  c = dataStr['head']['c_para']
-                  tags = data['result'].get('tags', [])
-                  mfr = re.sub(r'\s*\([^)]*[一-鿿][^)]*\)', '', c.get('Manufacturer', '')).strip()
+                  lib = (hit.get('componentLibraryType') or '').lower()
                   info = {
-                      'mfr': mfr,
-                      'mpn': c.get('Manufacturer Part', '') or c.get('MPN', ''),
-                      'cat': tags[0] if tags else '',
-                      'jlc': c.get('JLCPCB Part Class', '').replace(' Part', ''),
+                      'mfr': (hit.get('componentBrandEn') or '').strip(),
+                      'mpn': (hit.get('componentModelEn') or '').strip(),
+                      'cat': (hit.get('componentTypeEn') or '').strip(),
+                      'jlc': {'base': 'Basic', 'expand': 'Extended'}.get(lib, lib.capitalize()),
                   }
                   _lcsc_cache[lcsc_id] = info
-                  time.sleep(0.3)
+                  time.sleep(0.2)
                   return info
               except Exception as e:
                   print(f'  LCSC fetch {lcsc_id}: {e}', file=sys.stderr)
@@ -290,7 +296,7 @@ jobs:
                                inf.get('jlc','') or '—', inf.get('mfr','') or '—',
                                inf.get('mpn','') or '—', inf.get('cat','') or '—'))
               table = '\n'.join('| '+' | '.join(r)+' |' for r in rows)
-              return '*Manufacturer and MPN fetched automatically from [LCSC](https://lcsc.com).*\n\n' + table
+              return '*Manufacturer, MPN and JLCPCB class fetched automatically from the [JLCPCB parts API](https://jlcpcb.com/parts).*\n\n' + table
 
           def quality_tier(fields):
               maturity = fields.get('maturity', '')
