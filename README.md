@@ -15,11 +15,6 @@ PCB editors.
 
 ![Four design blocks from this repository](docs/gallery.svg)
 
-**Reading the image:** left to right — schematic, PCB layout, assembled board. That is
-also the ladder a block climbs: the corner badge is its
-[quality tier](CONTRIBUTING.md#quality-scale), and a block without a layout says
-`schematic only` under the name.
-
 ## Requirements
 
 | | |
