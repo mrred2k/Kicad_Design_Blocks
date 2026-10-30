@@ -10,11 +10,11 @@ I2C pull-up resistors 4.7k 0603 for 3.3V bus, one pair per block
 
 ## Bill of Materials
 
-*Manufacturer and MPN fetched automatically from [LCSC](https://lcsc.com).*
+*Manufacturer, MPN and JLCPCB class fetched automatically from the [JLCPCB parts API](https://jlcpcb.com/parts).*
 
 | Refs | Value | Footprint | LCSC | JLCPCB | Manufacturer | MPN | Category |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| R27, R36 | 4.7kΩ | R_0603_1608Metric | C99782 | Extended | YAGEO | RC0603FR-074K7L | Resistors |
+| R27, R36 | 4.7kΩ | R_0603_1608Metric | C99782 | Extended | YAGEO | RC0603FR-074K7L | Chip Resistor - Surface Mount |
 
 ---
 *Keywords: i2c pullup 4k7 0603 3V3*

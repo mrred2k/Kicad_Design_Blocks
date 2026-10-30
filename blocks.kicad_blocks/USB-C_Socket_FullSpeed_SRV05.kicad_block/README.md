@@ -10,13 +10,13 @@ USB 2.0 Type-C receptacle (HRO TYPE-C-31-M-12) as a 5V sink for full-speed devic
 
 ## Bill of Materials
 
-*Manufacturer and MPN fetched automatically from [LCSC](https://lcsc.com).*
+*Manufacturer, MPN and JLCPCB class fetched automatically from the [JLCPCB parts API](https://jlcpcb.com/parts).*
 
 | Refs | Value | Footprint | LCSC | JLCPCB | Manufacturer | MPN | Category |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| J2 | TYPE-C-31-M-12 | USB_C_Receptacle_HRO_TYPE-C-31-M-12 | C165948 | — | — | — | — |
-| R11, R13 | 5.1k | R_0603_1608Metric | C23186 | — | — | — | — |
-| U6 | SRV05-4 | SOT-23-6 | C558418 | — | — | — | — |
+| J2 | TYPE-C-31-M-12 | USB_C_Receptacle_HRO_TYPE-C-31-M-12 | C165948 | Extended | Korean Hroparts Elec | TYPE-C-31-M-12 | USB Connectors |
+| R11, R13 | 5.1k | R_0603_1608Metric | C23186 | Basic | UNI-ROYAL(Uniroyal Elec) | 0603WAF5101T5E | Chip Resistor - Surface Mount |
+| U6 | SRV05-4 | SOT-23-6 | C558418 | Extended | TECH PUBLIC | SRV05-4 | ESD and Surge Protection (TVS/ESD) |
 
 ---
 *Keywords: usb usb-c type-c connector full-speed 5v sink cc-resistor esd srv05 tvs*

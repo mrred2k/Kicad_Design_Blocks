@@ -10,12 +10,12 @@ LDO linear regulator, Vin 5V, Vout 3.3V fixed, 250mA max, XC6206P (SOT-23-3)
 
 ## Bill of Materials
 
-*Manufacturer and MPN fetched automatically from [LCSC](https://lcsc.com).*
+*Manufacturer, MPN and JLCPCB class fetched automatically from the [JLCPCB parts API](https://jlcpcb.com/parts).*
 
 | Refs | Value | Footprint | LCSC | JLCPCB | Manufacturer | MPN | Category |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| C9, C10 | 1u 50V | C_0603_1608Metric | C15849 | Basic | SAMSUNG | CL10A105KB8NNNC | Multilayer Ceramic Capacitors MLCC - SMD/SMT |
-| U2 | XC6206PxxxMR | SOT-23-3 | C5446 | Basic | TOREX | XC6206P332MR-G | Linear Voltage Regulators (LDO) |
+| C9, C10 | 1u 50V | C_0603_1608Metric | C15849 | Basic | Samsung Electro-Mechanics | CL10A105KB8NNNC | Multilayer Ceramic Capacitors MLCC - SMD/SMT |
+| U2 | XC6206PxxxMR | SOT-23-3 | C5446 | Basic | Torex Semicon | XC6206P332MR-G | Voltage Regulators - Linear, Low Drop Out (LDO) Regulators |
 
 ---
 *Keywords: ldo linear regulator 3V3 XC6206*
