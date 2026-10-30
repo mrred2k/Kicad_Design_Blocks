@@ -1,0 +1,11 @@
+{
+ "description": "USB 2.0 Type-C receptacle for full-speed devices (HRO TYPE-C-31-M-12), 5.1k pulldowns on CC1/CC2 for 5V sink, ESD array SRV05-4 (0.3 pF, 4 channels) on D+/D-/CC1/CC2. No 1.5k data pull-up: full-speed devices with an internal pull-up (CH340, RP2040, STM32) connect directly. Variant B of USB-C_Socket_FullSpeed (that one uses 2x 3.6V zener).",
+ "keywords": "usb usb-c type-c connector full-speed sink cc-resistor esd srv05 tvs",
+ "fields": {
+  "maturity": "schematic",
+  "lcsc_parts": "yes",
+  "jlcpcb_basic": "yes",
+  "has_3d": "partial",
+  "reviewed": "no"
+ }
+}
