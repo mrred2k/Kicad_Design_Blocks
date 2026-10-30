@@ -1,11 +1,11 @@
 {
- "description": "USB 2.0 Type-C receptacle for full-speed devices (HRO TYPE-C-31-M-12), 5.1k pulldowns on CC1/CC2 for 5V sink, ESD array SRV05-4 (0.3 pF, 4 channels) on D+/D-/CC1/CC2. No 1.5k data pull-up: full-speed devices with an internal pull-up (CH340, RP2040, STM32) connect directly. Variant B of USB-C_Socket_FullSpeed (that one uses 2x 3.6V zener).",
- "keywords": "usb usb-c type-c connector full-speed sink cc-resistor esd srv05 tvs",
+ "description": "USB 2.0 Type-C receptacle (HRO TYPE-C-31-M-12) as a 5V sink for full-speed devices: 5.1k pulldowns on CC1/CC2, ESD array SRV05-4 (SOT-23-6, 0.3 pF, 4 channels) protecting D+, D-, CC1 and CC2, VP tied to VBUS (5V), VN to GND. No 1.5k data pull-up - full-speed devices with an internal pull-up (CH340, RP2040, STM32) connect directly. Preferred over USB-C_Socket_FullSpeed, which uses two 3.6V zeners: the array has roughly 300x lower line capacitance, clamps in nanoseconds instead of microseconds and also protects the CC lines. Socket and ESD array are LCSC Extended (the JLC catalogue has no Basic ESD part); the 5.1k resistors are Basic. Schematic and layout included; the USB-C footprint lives in the project library GnssFanout, so the block is used inside projects of this repo family.",
+ "keywords": "usb usb-c type-c connector full-speed 5v sink cc-resistor esd srv05 tvs",
  "fields": {
-  "maturity": "schematic",
+  "maturity": "layout",
   "lcsc_parts": "yes",
   "jlcpcb_basic": "yes",
-  "has_3d": "partial",
+  "has_3d": "yes",
   "reviewed": "no"
  }
 }
