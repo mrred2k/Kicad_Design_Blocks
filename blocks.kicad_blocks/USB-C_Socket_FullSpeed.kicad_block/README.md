@@ -15,8 +15,8 @@ USB 2.0 Type-C receptacle for full-speed devices (HRO TYPE-C-31-M-12), 5.1k pull
 | Refs | Value | Footprint | LCSC | JLCPCB | Manufacturer | MPN | Category |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | D7, D8 | 3.6V | D_SOD-123 | C22395524 | Extended | R+O | MM1W3V6 | Zener Diodes |
-| J2 | TYPE-C-31-M-12 | USB_C_Receptacle_HRO_TYPE-C-31-M-12 | C165948 | Extended | 韩国韩荣 | TYPE-C-31-M-12 | USB Connectors |
-| R11, R13 | 5.1k | R_0603_1608Metric | C23186 | Basic | UNI-ROYAL | 0603WAF5101T5E | Resistors |
+| J2 | TYPE-C-31-M-12 | USB_C_Receptacle_HRO_TYPE-C-31-M-12 | C165948 | — | — | — | — |
+| R11, R13 | 5.1k | R_0603_1608Metric | C23186 | — | — | — | — |
 
 ---
 *Keywords: usb usb-c type-c connector full-speed sink cc-resistor esd*
