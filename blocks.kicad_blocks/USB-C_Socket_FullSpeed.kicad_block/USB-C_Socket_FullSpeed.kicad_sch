@@ -2849,7 +2849,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12"
+		(property "Footprint" "GnssFanout:USB_C_Receptacle_HRO_TYPE-C-31-M-12"
 			(at 697.23 163.98 0)
 			(hide yes)
 			(show_name no)
