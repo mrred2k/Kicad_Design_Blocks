@@ -139,6 +139,10 @@ jobs:
 
           def inner_svg(content, prefix):
               """Extract inner SVG content, prefixing IDs to avoid conflicts between panels."""
+              # Drop kicad-cli's <title>SVG Image created ... date <timestamp></title>.
+              # The timestamp makes every regenerated preview byte-different even when the
+              # drawing is identical, which shows up as permanent churn in the repo.
+              content = re.sub(r'<title>.*?</title>\s*', '', content, flags=re.DOTALL)
               content = re.sub(r'\bid="', f'id="{prefix}_', content)
               content = re.sub(r'url\(#', f'url(#{prefix}_', content)
               content = re.sub(r'href="#', f'href="#{prefix}_', content)
@@ -343,7 +347,32 @@ jobs:
           print(f'README: {block_dir}/README.md')
           PYEOF
 
-          for block_dir in blocks.kicad_blocks/*.kicad_block; do
+          # Only regenerate blocks whose schematic, layout or metadata actually changed in this push.
+          # Regenerating everything rewrote every preview/README on each commit (and refetched LCSC
+          # metadata), which showed up as unrelated diff churn. Manual runs still rebuild all blocks.
+          before="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+            TARGETS=$(ls -d blocks.kicad_blocks/*.kicad_block 2>/dev/null)
+          else
+            if ! RAW=$(git diff --name-only "$before" "${{ github.sha }}" \
+                        -- 'blocks.kicad_blocks/*/*.kicad_sch' \
+                           'blocks.kicad_blocks/*/*.kicad_pcb' \
+                           'blocks.kicad_blocks/*/*.json'); then
+              echo "git diff failed - falling back to all blocks"
+              RAW=""
+              TARGETS=$(ls -d blocks.kicad_blocks/*.kicad_block 2>/dev/null)
+            fi
+            if [ -z "$TARGETS" ]; then
+              TARGETS=$(echo "$RAW" | cut -d/ -f1,2 | sort -u | while read -r d; do [ -d "$d" ] && echo "$d"; done)
+            fi
+          fi
+          if [ -z "$TARGETS" ]; then
+            echo "No block sources changed - nothing to regenerate."
+            exit 0
+          fi
+          echo "Regenerating: $(echo "$TARGETS" | tr '\n' ' ')"
+
+          for block_dir in $TARGETS; do
             [ -d "$block_dir" ] || continue
             block_name=$(basename "$block_dir" .kicad_block)
 
